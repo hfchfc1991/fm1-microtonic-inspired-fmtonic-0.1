@@ -13,30 +13,36 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download & Extract JieLi Toolchain & Tools
+      - name: Download & Extract JieLi Toolchain
         run: |
           mkdir -p /opt/jieli
+          echo "Downloading compiler..."
           curl -sL https://pkgman.jieliapp.com/s/linux-toolchain | tar -xJ -C /opt/jieli || true
+          echo "Downloading packager..."
           curl -sL https://pkgman.jieliapp.com/s/linux-postbuild | tar -xJ -C /opt/jieli || true
+
+          # Create standard JieLi system links
+          PI32_PATH=$(find /opt/jieli -type d -name "pi32v2" | head -n 1)
+          sudo ln -sfn "$PI32_PATH" /opt/jieli/pi32v2
 
       - name: Compile & Link Tonic Firmware
         run: |
           mkdir -p build
           
-          # Add JieLi toolchain folder directly to PATH
-          JL_BIN=$(dirname $(find /opt/jieli -type f -name "clang" | head -n 1))
-          export PATH="$JL_BIN:$PATH"
-          echo "==> Toolchain path: $JL_BIN"
+          # Use pi32v2 binaries directly
+          PI32_BIN="/opt/jieli/pi32v2/bin"
+          export PATH="$PI32_BIN:$PATH"
+          echo "==> Using toolchain at: $PI32_BIN"
           
-          # 1. Compile C code
-          clang -target pi32v2 -mcpu=r3 -O2 -c src/po32_synth.c -o build/po32_synth.o
-          clang -target pi32v2 -mcpu=r3 -O2 -c src/gui_sequencer.c -o build/gui_sequencer.o
+          # 1. Compile C files
+          "$PI32_BIN/clang" -target pi32v2 -mcpu=r3 -O2 -c src/po32_synth.c -o build/po32_synth.o
+          "$PI32_BIN/clang" -target pi32v2 -mcpu=r3 -O2 -c src/gui_sequencer.c -o build/gui_sequencer.o
           
-          # 2. Link using clang directly
-          clang -target pi32v2 -mcpu=r3 -nostdlib build/po32_synth.o build/gui_sequencer.o -o build/app.elf
+          # 2. Link objects into ELF
+          "$PI32_BIN/ld" build/po32_synth.o build/gui_sequencer.o -o build/app.elf
           
           # 3. Create app.bin
-          llvm-objcopy -O binary build/app.elf build/app.bin
+          "$PI32_BIN/objcopy" -O binary build/app.elf build/app.bin
 
       - name: Package .fwsc File
         run: |
@@ -44,7 +50,7 @@ jobs:
           chmod +x "$JL_ISD" || true
           echo "==> Using isd_download at: $JL_ISD"
           
-          # Package everything into FM-1_TONIC.fwsc
+          # Package into FM-1_TONIC.fwsc
           "$JL_ISD" -f build/app.bin \
             -toname FM-1_TONIC.fwsc \
             -dev br28 \
