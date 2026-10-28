@@ -1,0 +1,48 @@
+name: Build FM-1 Firmware
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download & Install JieLi Linux Toolchain
+        run: |
+          mkdir -p /opt/jieli
+          curl -sL https://pkgman.jieliapp.com/s/linux-toolchain | tar -xJ -C /opt/jieli
+          echo "/opt/jieli/pi32v2/bin" >> $GITHUB_PATH
+          echo "/opt/jieli/postbuild" >> $GITHUB_PATH
+
+      - name: Compile Tonic Firmware
+        run: |
+          mkdir -p build
+          # Compile C files with pi32v2 target
+          clang -target pi32v2 -O2 -c src/po32_synth.c -o build/po32_synth.o
+          clang -target pi32v2 -O2 -c src/gui_sequencer.c -o build/gui_sequencer.o
+          
+          # Link into raw application binary
+          ld.lld build/po32_synth.o build/gui_sequencer.o -o build/app.elf
+          llvm-objcopy -O binary build/app.elf build/app.bin
+
+      - name: Package .fwsc File
+        run: |
+          # Use JieLi packaging tool with your root bootloader files
+          isd_download -f build/app.bin \
+            -toname FM-1_TONIC.fwsc \
+            -dev br28 \
+            -boot uboot.boot \
+            -cfg cfg_tool.bin \
+            -eq eq_cfg_hw.bin
+
+      - name: Upload .fwsc Firmware Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FM-1_TONIC_Firmware
+          path: FM-1_TONIC.fwsc
