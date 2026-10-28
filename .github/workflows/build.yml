@@ -13,12 +13,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Install Dependencies for JieLi Packager
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libegl1 libgl1 libglib2.0-0
+
       - name: Download & Extract JieLi Toolchain
         run: |
           mkdir -p /opt/jieli
-          echo "Downloading compiler..."
           curl -sL https://pkgman.jieliapp.com/s/linux-toolchain | tar -xJ -C /opt/jieli || true
-          echo "Downloading packager..."
           curl -sL https://pkgman.jieliapp.com/s/linux-postbuild | tar -xJ -C /opt/jieli || true
 
           # Create standard JieLi system link
@@ -40,14 +43,14 @@ jobs:
           # 2. Link objects into ELF
           "$PI32_BIN/ld" build/po32_synth.o build/gui_sequencer.o -o build/app.elf
           
-          # 3. Create app.bin using JieLi's -j .text parameter
-          "$PI32_BIN/objcopy" -O binary -j .text build/app.elf build/app.bin || /usr/bin/objcopy -O binary build/app.elf build/app.bin
+          # 3. Create app.bin using JieLi's -j .text section
+          "$PI32_BIN/objcopy" -O binary -j .text build/app.elf build/app.bin
 
       - name: Package .fwsc File
         run: |
           JL_ISD=$(find /opt/jieli -type f -name "isd_download" | head -n 1)
           chmod +x "$JL_ISD" || true
-          echo "==> Using isd_download at: $JL_ISD"
+          echo "==> Running packager at: $JL_ISD"
           
           # Package bootloader, audio configs and code into .fwsc
           "$JL_ISD" -f build/app.bin \
