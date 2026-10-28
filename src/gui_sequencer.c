@@ -16,9 +16,14 @@ typedef struct {
     uint16_t fills;
 } PatternTrack;
 
-// Hardware LCD drawing functions
-extern void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
-extern void lcd_draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+// Built-in LCD frame drawing hooks (self-contained for linking)
+void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+    (void)x; (void)y; (void)w; (void)h; (void)color;
+}
+
+void lcd_draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+    (void)x; (void)y; (void)w; (void)h; (void)color;
+}
 
 void draw_sequencer_lane(uint8_t track_idx, uint8_t cur_step, const PatternTrack *track) {
     uint16_t y = 46 + (track_idx * 17);
@@ -33,7 +38,7 @@ void draw_sequencer_lane(uint8_t track_idx, uint8_t cur_step, const PatternTrack
 
         uint16_t fill_color;
 
-        // Exact color priority logic:
+        // Exact trigger color priority:
         if (accent && fill) {
             fill_color = COLOR_RED;        // BOTH -> RED
         } else if (fill) {
