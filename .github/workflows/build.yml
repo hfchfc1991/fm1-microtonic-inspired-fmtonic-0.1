@@ -13,28 +13,41 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download & Install JieLi Linux Toolchain and Postbuild
+      - name: Download & Extract JieLi Toolchain & Tools
         run: |
-          sudo mkdir -p /opt/jieli
-          curl -sL https://pkgman.jieliapp.com/s/linux-toolchain | sudo tar -xJ --strip-components=1 -C /opt/jieli
-          sudo mkdir -p /opt/jieli/postbuild
-          curl -sL https://pkgman.jieliapp.com/s/linux-postbuild | sudo tar -xJ --strip-components=1 -C /opt/jieli/postbuild
-          sudo chmod +x /opt/jieli/common/bin/* /opt/jieli/postbuild/* || true
+          mkdir -p /opt/jieli
+          echo "Downloading JieLi compiler..."
+          curl -sL https://pkgman.jieliapp.com/s/linux-toolchain | tar -xJ -C /opt/jieli || true
+          echo "Downloading JieLi packaging tools..."
+          curl -sL https://pkgman.jieliapp.com/s/linux-postbuild | tar -xJ -C /opt/jieli || true
 
       - name: Compile Tonic Firmware
         run: |
           mkdir -p build
-          # Use JieLi's custom Clang compiler for the FM-1 pi32v2 CPU
-          /opt/jieli/common/bin/clang -target pi32v2 -integrated-as -O2 -c src/po32_synth.c -o build/po32_synth.o
-          /opt/jieli/common/bin/clang -target pi32v2 -integrated-as -O2 -c src/gui_sequencer.c -o build/gui_sequencer.o
           
-          # Link into raw application binary
-          /opt/jieli/common/bin/clang -target pi32v2 build/po32_synth.o build/gui_sequencer.o -o build/app.elf -nostdlib
-          /opt/jieli/common/bin/llvm-objcopy -O binary build/app.elf build/app.bin
+          # Automatically find JieLi's compiler
+          JL_CLANG=$(find /opt/jieli -type f -name "clang" | head -n 1)
+          JL_LD=$(find /opt/jieli -type f \( -name "ld.lld" -o -name "pi32v2-elf-ld" \) | head -n 1)
+          JL_OBJCOPY=$(find /opt/jieli -type f \( -name "llvm-objcopy" -o -name "pi32v2-elf-objcopy" \) | head -n 1)
+          
+          echo "==> Using JieLi Clang at: $JL_CLANG"
+          
+          # Compile the engine and display code
+          "$JL_CLANG" -target pi32v2 -mcpu=r3 -O2 -c src/po32_synth.c -o build/po32_synth.o
+          "$JL_CLANG" -target pi32v2 -mcpu=r3 -O2 -c src/gui_sequencer.c -o build/gui_sequencer.o
+          
+          # Link and generate raw application binary
+          "$JL_LD" build/po32_synth.o build/gui_sequencer.o -o build/app.elf
+          "$JL_OBJCOPY" -O binary build/app.elf build/app.bin
 
       - name: Package .fwsc File
         run: |
-          /opt/jieli/postbuild/isd_download -f build/app.bin \
+          JL_ISD=$(find /opt/jieli -type f -name "isd_download" | head -n 1)
+          chmod +x "$JL_ISD" || true
+          echo "==> Using isd_download at: $JL_ISD"
+          
+          # Package bootloader, audio configs and code into .fwsc
+          "$JL_ISD" -f build/app.bin \
             -toname FM-1_TONIC.fwsc \
             -dev br28 \
             -boot uboot.boot \
