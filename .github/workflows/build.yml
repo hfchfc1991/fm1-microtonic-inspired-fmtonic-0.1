@@ -21,7 +21,7 @@ jobs:
           echo "Downloading packager..."
           curl -sL https://pkgman.jieliapp.com/s/linux-postbuild | tar -xJ -C /opt/jieli || true
 
-          # Create standard JieLi system links
+          # Create standard JieLi system link
           PI32_PATH=$(find /opt/jieli -type d -name "pi32v2" | head -n 1)
           sudo ln -sfn "$PI32_PATH" /opt/jieli/pi32v2
 
@@ -29,7 +29,6 @@ jobs:
         run: |
           mkdir -p build
           
-          # Use pi32v2 binaries directly
           PI32_BIN="/opt/jieli/pi32v2/bin"
           export PATH="$PI32_BIN:$PATH"
           echo "==> Using toolchain at: $PI32_BIN"
@@ -41,8 +40,8 @@ jobs:
           # 2. Link objects into ELF
           "$PI32_BIN/ld" build/po32_synth.o build/gui_sequencer.o -o build/app.elf
           
-          # 3. Create app.bin
-          "$PI32_BIN/objcopy" -O binary build/app.elf build/app.bin
+          # 3. Create app.bin using JieLi's -j .text parameter
+          "$PI32_BIN/objcopy" -O binary -j .text build/app.elf build/app.bin || /usr/bin/objcopy -O binary build/app.elf build/app.bin
 
       - name: Package .fwsc File
         run: |
@@ -50,13 +49,14 @@ jobs:
           chmod +x "$JL_ISD" || true
           echo "==> Using isd_download at: $JL_ISD"
           
-          # Package into FM-1_TONIC.fwsc
+          # Package bootloader, audio configs and code into .fwsc
           "$JL_ISD" -f build/app.bin \
             -toname FM-1_TONIC.fwsc \
             -dev br28 \
             -boot uboot.boot \
             -cfg cfg_tool.bin \
-            -eq eq_cfg_hw.bin
+            -eq eq_cfg_hw.bin || \
+          "$JL_ISD" -tonorflash -dev br28 -uboot uboot.boot -app build/app.bin -res cfg_tool.bin eq_cfg_hw.bin -toname FM-1_TONIC.fwsc
 
       - name: Upload .fwsc Firmware Artifact
         uses: actions/upload-artifact@v4
